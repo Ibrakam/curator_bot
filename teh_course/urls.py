@@ -14,11 +14,17 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from django.conf import settings
+from django.conf.urls.static import static
 from django.contrib import admin
 from django.urls import path
-from course.views import export_to_excel
+from course.views import export_to_excel, export_to_excel_complaint, export_to_excel_request
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('export/', export_to_excel),
+    path('export-request/', export_to_excel_request),
+    path('export-complaint/', export_to_excel_complaint),
 ]
+
+urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)

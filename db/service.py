@@ -1,10 +1,13 @@
 import logging
 import os
+from typing import Optional
 
+from aiogram import types
 from django.db import transaction
 
-from course.models import User, RequestModel, Refund, Course, ContactInfo, Question
-from db import get_db
+from course.models import (User, RequestModel, Refund,
+                           ContactInfo, Question, AnswerForComplain,
+                           Complaint)
 from asgiref.sync import sync_to_async
 
 
@@ -109,7 +112,7 @@ async def update_request_status(request_id: int, status: str, file_path: str = N
         return False
 
 
-async def update_refund_status(request_id: int, status: str):
+async def update_refund_status(request_id: int, status: str, file_path: str = None):
     """
     Обновляет статус заявки и добавляет файл записи разговора
 
@@ -127,6 +130,7 @@ async def update_refund_status(request_id: int, status: str):
             try:
                 request = Refund.objects.get(id=request_id)
                 request.status = status
+                request.admin_notes = file_path
 
                 request.save()
                 return True
@@ -144,34 +148,61 @@ async def update_refund_status(request_id: int, status: str):
         return False
 
 
-async def download_media(message, destination_dir: str = "call_records"):
+async def download_media(message: types.Message, destination_dir: str = "call_records") -> Optional[str]:
     """
-    Универсальный метод сохранения файлов с поддержкой всех типов
+    Универсальный метод сохранения файлов с поддержкой всех типов медиа
     """
-    # Список возможных типов файлов
-    file_types = [
-        ('document', message.document),
-        ('audio', message.audio),
-        ('video', message.video),
-        ('voice', message.voice),
-        ('video_note', message.video_note)
-    ]
+    # Убедимся, что директория для сохранения существует
+    # os.makedirs(destination_dir, exist_ok=True)
 
-    # Находим первый непустой тип файла
-    for file_type, file_object in file_types:
-        if file_object:
-            try:
-                # Генерируем уникальное имя файла
-                unique_filename = f"{file_type}_{message.message_id}_{file_object.file_unique_id}"
-                file = await file_object.download(
-                    destination=os.path.join(destination_dir, unique_filename)
-                )
-                return file.name
-            except Exception as e:
-                logging.error(f"Ошибка при сохранении {file_type}: {e}")
-                return None
+    try:
+        # Для голосовых и аудио сообщений
+        if message.voice:
+            file = await message.bot.get_file(message.voice.file_id)
+            file_path = os.path.join(destination_dir, f"voice_{message.message_id}_{message.voice.file_unique_id}.ogg")
+            await message.bot.download_file(file.file_path, file_path)
+            return file_path
 
-    return None
+        if message.audio:
+            file = await message.bot.get_file(message.audio.file_id)
+            # Используем расширение из mime_type или дефолтное
+            ext = message.audio.mime_type.split('/')[-1] if message.audio.mime_type else 'mp3'
+            file_path = os.path.join(destination_dir,
+                                     f"audio_{message.message_id}_{message.audio.file_unique_id}.{ext}")
+            await message.bot.download_file(file.file_path, file_path)
+            return file_path
+
+        # Для документов
+        if message.document:
+            file = await message.bot.get_file(message.document.file_id)
+            file_path = os.path.join(destination_dir,
+                                     message.document.file_name or f"document_{message.message_id}_{message.document.file_unique_id}")
+            await message.bot.download_file(file.file_path, file_path)
+            return file_path
+
+        # Для видео
+        if message.video:
+            file = await message.bot.get_file(message.video.file_id)
+            ext = message.video.mime_type.split('/')[-1] if message.video.mime_type else 'mp4'
+            file_path = os.path.join(destination_dir,
+                                     f"video_{message.message_id}_{message.video.file_unique_id}.{ext}")
+            await message.bot.download_file(file.file_path, file_path)
+            return file_path
+
+        # Для видео-заметок
+        if message.video_note:
+            file = await message.bot.get_file(message.video_note.file_id)
+            file_path = os.path.join(destination_dir,
+                                     f"video_note_{message.message_id}_{message.video_note.file_unique_id}.mp4")
+            await message.bot.download_file(file.file_path, file_path)
+            return file_path
+
+        logging.error(f"Неподдерживаемый тип файла: {message.content_type}")
+        return None
+
+    except Exception as e:
+        logging.error(f"Ошибка при сохранении файла: {e}")
+        return None
 
 
 @sync_to_async
@@ -232,11 +263,12 @@ def get_user_by_id(user_id: int):
 
 
 @sync_to_async
-def update_user(user_id: int, phone_number: str, full_name: str):
+def update_user(user_id: int, phone_number: str, full_name: str, username: str):
     try:
         user = User.objects.get(user_id=user_id)
         user.phone = phone_number
         user.full_name = full_name
+        user.username = username
         user.save()
         return True
     except User.DoesNotExist:
@@ -283,6 +315,7 @@ def get_question(question_id: int) -> dict:
     except Exception as e:
         raise ValueError(f"Ошибка при получении вопроса: {str(e)}")
 
+
 @sync_to_async
 def delete_question(question_id: int):
     """
@@ -304,3 +337,113 @@ def delete_question(question_id: int):
         raise ValueError(f"Вопрос с ID {question_id} не найден")
     except Exception as e:
         raise ValueError(f"Ошибка при удалении вопроса: {str(e)}")
+
+
+@sync_to_async
+def save_complaint(user_id: int, answer: str) -> int:
+    """
+    Сохраняет вопрос в базе данных
+
+    :param user_id: ID пользователя
+    :param answer: Текст вопроса
+    :return: ID сохраненного вопроса
+    """
+    try:
+        answer = AnswerForComplain.objects.create(
+            user_id=user_id,
+            answer=answer,
+        )
+        return answer.id
+    except Exception as e:
+        raise ValueError(f"Ошибка при сохранении вопроса: {str(e)}")
+
+
+@sync_to_async
+def get_answer(answer_id: int) -> dict:
+    """
+    Получает информацию о вопросе по его ID
+
+    :param answer_id: ID вопроса
+    :return: Словарь с информацией о вопросе или None
+    """
+    try:
+        asnwer = AnswerForComplain.objects.get(id=answer_id)
+        return {
+            'id': asnwer.id,
+            'user_id': asnwer.user_id,
+            'answer': asnwer.answer,
+            'created_at': asnwer.created_at
+        }
+    except AnswerForComplain.DoesNotExist:
+        return {None: None}
+    except Exception as e:
+        raise ValueError(f"Ошибка при получении вопроса: {str(e)}")
+
+
+@sync_to_async
+def delete_answer(answer_id: int):
+    """
+    Удаляет вопрос по его ID
+
+    :param answer_id: ID вопроса
+    :return: True, если удаление успешно
+    """
+    try:
+        with transaction.atomic():
+            # Получаем вопрос с блокировкой для обновления
+            answer = AnswerForComplain.objects.select_for_update().get(id=answer_id)
+
+            # Удаляем вопрос
+            answer.delete()
+
+            return True
+    except AnswerForComplain.DoesNotExist:
+        raise ValueError(f"Вопрос с ID {answer_id} не найден")
+    except Exception as e:
+        raise ValueError(f"Ошибка при удалении вопроса: {str(e)}")
+
+
+@sync_to_async
+def add_complaint(user_id, complain):
+    """
+    Добавляет жалобу в базу данных
+
+    :param user_id: ID пользователя
+    :param complain: Текст жалобы
+    :return: ID жалобы
+    """
+    try:
+        with transaction.atomic():
+            user = User.objects.select_for_update().get(user_id=user_id)
+            complaint = Complaint.objects.create(
+                user_id=user_id,
+                user_info=user,
+                complain=complain
+            )
+        return complaint.id
+    except Exception as e:
+        raise ValueError(f"Ошибка при сохранении жалобы: {str(e)}")
+
+
+@sync_to_async
+def get_all_complaint() -> list | None:
+    """
+    Получает информацию о жалобе по еей ID
+
+    :return: Словарь с информацией о жалобе или None
+    """
+    try:
+        complaint = Complaint.objects.all()
+        complaint_list = []
+        for i in complaint:
+            complaint_list.append({
+                'id': i.id,
+                'user_id': i.user_id,
+                'user_info': i.user_info,
+                'complaint': i.complain
+            })
+        return complaint_list
+    except Complaint.DoesNotExist:
+        return None
+    except Exception as e:
+        raise ValueError(f"Ошибка при получении жалобы: {str(e)}")

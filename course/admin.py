@@ -1,5 +1,5 @@
 from django.contrib import admin
-from course.models import User, RequestModel, Refund, Course, ContactInfo
+from course.models import User, RequestModel, Refund, ContactInfo, Complaint
 
 
 # Register your models here.
@@ -27,17 +27,17 @@ class RefundAdmin(admin.ModelAdmin):
     ordering = ('user_id', 'name')
 
 
-@admin.register(Course)
-class CourseAdmin(admin.ModelAdmin):
-    list_display = ('name', 'description', 'price', 'start_date')
-    list_filter = ('start_date', 'name')
-    search_fields = ('name', 'description')
-    ordering = ('start_date', 'name')
-
-
 @admin.register(ContactInfo)
 class ContactInfoAdmin(admin.ModelAdmin):
     list_display = ('id', 'phone_number', 'tg_username')
     list_filter = ('phone_number', 'tg_username')
     search_fields = ('phone_number', 'tg_username')
+    ordering = ['-id']
+
+
+@admin.register(Complaint)
+class ComplaintAdmin(admin.ModelAdmin):
+    list_display = ('user_id', "complain", "created_at")
+    list_filter = ('created_at', 'user_id')
+    search_fields = ('user_id', "complain")
     ordering = ['-id']
