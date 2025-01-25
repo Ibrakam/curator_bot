@@ -32,7 +32,7 @@ async def call_me_request(message: types.Message):
                      f"Ariza turi: Qayta qo'ng'iroq")
 
     try:
-        admin_chat_id = await admin_id(message.from_user.id, "support")
+        admin_chat_id = await admin_id("support")
         await message.bot.send_message(admin_chat_id, admin_message, reply_markup=keyboard)
     except Exception as e:
         logging.error(f"Administratorga xabar yuborishda xatolik: {e}")
@@ -126,7 +126,7 @@ async def admin_response_to_question(message: types.Message, state: FSMContext):
 
 
 async def notify_admin_about_complaint(complaint, user_id, complaint_id, message: types.Message):
-    admin_chat_id = await admin_id(message.from_user.id, "support")
+    admin_chat_id = await admin_id("support")
     await message.bot.send_message(
         chat_id=admin_chat_id,
         text=f"Yangi shikoyat (ID: {complaint_id}):\n"
@@ -171,7 +171,7 @@ async def admin_response_to_question(message: types.Message):
 
 
 async def notify_admin_about_question(question_id, user_id, question_text, message: types.Message):
-    admin_chat_id = await admin_id(message.from_user.id, "curator")
+    admin_chat_id = await admin_id("curator")
     await message.bot.send_message(
         chat_id=admin_chat_id,
         text=f"Yangi savol (ID: {question_id}):\n"

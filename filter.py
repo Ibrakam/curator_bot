@@ -3,8 +3,8 @@ from course.models import User
 from asgiref.sync import sync_to_async
 
 @sync_to_async
-def admin_id(user_id, role):
-    user = User.objects.get(user_id=user_id)
+def admin_id(role):
+    user = User.objects.filter(role=role).first()
     print(user.role)
     if user.role == role:
         print(user.id)

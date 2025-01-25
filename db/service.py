@@ -426,7 +426,7 @@ def add_complaint(user_id, complain):
 
 
 @sync_to_async
-def get_all_complaint() -> list | None:
+def get_all_complaint():
     """
     Получает информацию о жалобе по еей ID
 

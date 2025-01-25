@@ -25,7 +25,7 @@ from course.bot.curator import education_router
 
 
 # Конфигурация
-TOKEN = '6463653390:AAFCmUhro2O-FpGcTwlAlUIu_R3_Pq24WJ0'
+TOKEN = '7853130048:AAFDy2PZeA3_2KIiLo9Ad_miNQY1P_GkGm4'
 
 
 async def main():

@@ -33,8 +33,9 @@ async def call_me_request(message: types.Message):
                      f"So‘rov turi: Qayta qo‘ng‘iroq")
 
     try:
-        admin_chat_id = await admin_id(message.from_user.id, "sales_department")
-        await message.bot.send_message(admin_chat_id, admin_message, reply_markup=keyboard)
+        admin_chat_id = await admin_id("sales_department")
+        logging.info(admin_chat_id)
+        await message.bot.send_message(int(admin_chat_id), admin_message, reply_markup=keyboard)
     except Exception as e:
         logging.error(f"Admin uchun xabar yuborishda xatolik: {e}")
 
@@ -138,7 +139,7 @@ async def process_complaint(message: types.Message, state: FSMContext):
 
     user = await get_user_by_id(message.from_user.id)
     await add_complaint(user.user_id, message.text)
-    admin_chat_id = await admin_id(message.from_user.id, "sales_department")
+    admin_chat_id = await admin_id("sales_department")
     print(user.full_name, user.username)
-    await message.bot.send_message(admin_chat_id, f"Shikoyat {user.full_name}, @{user.username} dan:\n{message.text}")
+    await message.bot.send_message(int(admin_chat_id), f"Shikoyat {user.full_name}, @{user.username} dan:\n{message.text}")
     await state.set_state(UserStates.sales_menu)

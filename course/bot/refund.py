@@ -127,7 +127,7 @@ async def save_refund_request(message: types.Message, state: FSMContext):
             ]
         ])
         user = await get_user_by_id(message.from_user.id)
-        admin_chat_id = await admin_id(message.from_user.id, "refund")
+        admin_chat_id = await admin_id("refund")
         # Yangi qaytarish haqida administratorni xabardor qilish
         await message.bot.send_message(admin_chat_id,
                                        f"🔔 Yangi qaytarish so‘rovi!\n"
