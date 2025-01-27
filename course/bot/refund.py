@@ -1,4 +1,5 @@
 import logging
+from collections import defaultdict
 
 from aiogram import types, Router, F
 from aiogram.fsm.context import FSMContext
@@ -105,6 +106,11 @@ async def process_refund(message: types.Message, state: FSMContext):
     await state.set_state(UserStates.refund_details)
 
 
+REQUEST_MESSAGES = defaultdict(dict)
+
+REQUEST_STATUSES = {}
+
+
 @refund_router.message(UserStates.refund_details)
 async def save_refund_request(message: types.Message, state: FSMContext):
     if message.text == "Ortga":
@@ -128,16 +134,20 @@ async def save_refund_request(message: types.Message, state: FSMContext):
         ])
         user = await get_user_by_id(message.from_user.id)
         admin_chat_id = await admin_id("refund")
+        for admin in admin_chat_id:
+            sent_msg = await message.bot.send_message(
+                chat_id=admin_id,
+                text=f"Yangi qaytarish so‘rovi!\n"
+                     f"Ismi: {data['name']} {data['surname']}\n"
+                     f"Telefon: {user.phone}\n"
+                     f"Kurs: {data['course']}\n"
+                     f"Oqim: {data['stream']}\n"
+                     f"Sabab: {message.text}",
+                reply_markup=inline_keyboard
+            )
+            # Запоминаем, какому админу (admin_id) какое сообщение (message_id) отправили
+            REQUEST_MESSAGES[new_refund][admin_id] = sent_msg.message_id
         # Yangi qaytarish haqida administratorni xabardor qilish
-        await message.bot.send_message(admin_chat_id,
-                                       f"🔔 Yangi qaytarish so‘rovi!\n"
-                                       f"Ismi: {data['name']} {data['surname']}\n"
-                                       f"Telefon: {user.phone}\n"
-                                       f"Kurs: {data['course']}\n"
-                                       f"Oqim: {data['stream']}\n"
-                                       f"Sabab: {message.text}",
-                                       reply_markup=inline_keyboard
-                                       )
 
         await message.answer(
             "Sizning qaytarish so‘rovingiz qabul qilindi. "
@@ -163,8 +173,17 @@ async def save_refund_request(message: types.Message, state: FSMContext):
 @refund_router.callback_query(lambda c: c.data.startswith("refund_"))
 async def process_refund_call_record(callback: types.CallbackQuery, state: FSMContext):
     # Callback_data dan so‘rov ID sini chiqaramiz
-    request_id = callback.data.split("_")[-1]
+    data = callback.data
+    # формат: "confirm_call_12345"
+    request_id_str = data.split("_")[-1]
+    request_id = int(request_id_str)
     print(f"Joriy holat: {await state.get_state()}")
+
+    if REQUEST_STATUSES.get(request_id):
+        # Уже обработана. Показываем alert.
+        await callback.answer("Bu so‘rov allaqachon boshqa administrator tomonidan qayta ishlangan.",
+                              show_alert=True)
+        return
 
     # Administratorni suhbat yozuvini yuklashga taklif qilamiz
     await callback.message.answer(f"№{request_id} qaytarishga oid suhbat yozuvini yuklang")
@@ -174,6 +193,26 @@ async def process_refund_call_record(callback: types.CallbackQuery, state: FSMCo
 
     # So‘rov ID sini holatda saqlaymiz
     await state.update_data({"current_request_id": request_id})
+
+    REQUEST_STATUSES[request_id] = True
+
+    # чтобы показать, что заявка уже в обработке (или закрыта)
+    admin_msg_dict = REQUEST_MESSAGES.get(request_id, {})
+
+    who_accepted = callback.from_user.full_name
+    text_for_all = f"So‘rov №{request_id} allaqachon qabul qilingan.\nUni bajarayotgan: {who_accepted}"
+
+    for admin, msg_id in admin_msg_dict.items():
+        try:
+            # Можно либо отредактировать текст, либо убрать инлайн-кнопки
+            # Ниже пример замены текста (кнопку убираем вообще)
+            await callback.message.bot.edit_message_text(
+                chat_id=admin,
+                message_id=msg_id,
+                text=text_for_all
+            )
+        except Exception as e:
+            logging.error(f"Не удалось отредактировать сообщение для админа {admin_id}: {e}")
 
 
 @refund_router.message(UserStates.refund_request)
@@ -190,7 +229,6 @@ async def save_call_record(message: types.Message, state: FSMContext):
         state_data['file_path'] = file_path
 
         if file_path:
-
             # Tasdiqlash uchun klaviatura yaratamiz
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [
@@ -198,9 +236,9 @@ async def save_call_record(message: types.Message, state: FSMContext):
                         text="Qaytarishni tasdiqlash",
                         callback_data=f"confirm_refund_{request_id}"
                     ), InlineKeyboardButton(
-                        text="Qaytarishni rad etish",
-                        callback_data=f"reject_refund_{request_id}"
-                    )
+                    text="Qaytarishni rad etish",
+                    callback_data=f"reject_refund_{request_id}"
+                )
                 ]
             ])
             await state.update_data(state_data)

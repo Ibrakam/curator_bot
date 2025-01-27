@@ -2,14 +2,14 @@ from aiogram.filters import Filter
 from course.models import User
 from asgiref.sync import sync_to_async
 
+
 @sync_to_async
 def admin_id(role):
-    user = User.objects.filter(role=role).first()
+    user = User.objects.filter(role=role).all()
     print(user.role)
     if user.role == role:
         print(user.id)
-        return user.user_id
-
+        return [i.user_id for i in user]
 
 
 class IsCurator(Filter):

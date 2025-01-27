@@ -1,15 +1,21 @@
 import logging
+from collections import defaultdict
 
 from aiogram import types, Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from course.bot.states import UserStates
-from db.service import add_request, download_media, update_request_status, close_request_in_database, get_contacts, \
+from db.service import add_request, get_user_by_id, download_media, update_request_status, close_request_in_database, get_contacts, \
     get_question, delete_question, save_question, save_complaint, get_answer, delete_answer
 from filter import admin_id
 
 education_router = Router()
+
+REQUEST_MESSAGES = defaultdict(dict)
+
+
+REQUEST_STATUSES = {}
 
 
 @education_router.message(F.text == "Menga qo'ng'iroq qiling", UserStates.education_menu)
@@ -25,25 +31,59 @@ async def call_me_request(message: types.Message):
             )
         ]
     ])
-
+    user = await get_user_by_id(message.from_user.id)
     admin_message = (f"Yangi ariza No{request_id}\n"
-                     f"Foydalanuvchi: {message.from_user.full_name}\n"
-                     f"Foydalanuvchi ID: {message.from_user.id}\n"
+                     f"Foydalanuvchi: {user.full_name}\n"
+                     f"Foydalanuvchi telefon: {user.phone}\n"
                      f"Ariza turi: Qayta qo'ng'iroq")
 
     try:
         admin_chat_id = await admin_id("support")
-        await message.bot.send_message(admin_chat_id, admin_message, reply_markup=keyboard)
+        for admin in admin_chat_id:
+            sent_msg = await message.bot.send_message(
+                chat_id=admin_id,
+                text=admin_message,
+                reply_markup=keyboard
+            )
+            # Запоминаем, какому админу (admin_id) какое сообщение (message_id) отправили
+            REQUEST_MESSAGES[request_id][admin_id] = sent_msg.message_id
     except Exception as e:
         logging.error(f"Administratorga xabar yuborishda xatolik: {e}")
 
 
 @education_router.callback_query(lambda c: c.data.startswith("confirm_call_"))
 async def process_call_confirmation(callback: types.CallbackQuery, state: FSMContext):
-    request_id = callback.data.split("_")[-1]
+    data = callback.data
+    # формат: "confirm_call_12345"
+    request_id_str = data.split("_")[-1]
+    request_id = int(request_id_str)
+    if REQUEST_STATUSES.get(request_id):
+        # Уже обработана. Показываем alert.
+        await callback.answer("Bu so‘rov allaqachon boshqa administrator tomonidan qayta ishlangan.",
+                              show_alert=True)
+        return
     await callback.message.answer(f"Iltimos, No{request_id} ariza bo'yicha suhbat yozuvini biriktiring")
     await state.set_state(UserStates.waiting_for_call_record)
     await state.update_data({"current_request_id": request_id})
+    REQUEST_STATUSES[request_id] = True
+
+    # чтобы показать, что заявка уже в обработке (или закрыта)
+    admin_msg_dict = REQUEST_MESSAGES.get(request_id, {})
+
+    who_accepted = callback.from_user.full_name
+    text_for_all = f"So‘rov №{request_id} allaqachon qabul qilingan.\nUni bajarayotgan: {who_accepted}"
+
+    for admin, msg_id in admin_msg_dict.items():
+        try:
+            # Можно либо отредактировать текст, либо убрать инлайн-кнопки
+            # Ниже пример замены текста (кнопку убираем вообще)
+            await callback.message.bot.edit_message_text(
+                chat_id=admin,
+                message_id=msg_id,
+                text=text_for_all
+            )
+        except Exception as e:
+            logging.error(f"Не удалось отредактировать сообщение для админа {admin_id}: {e}")
 
 
 @education_router.message(UserStates.waiting_for_call_record)
@@ -127,13 +167,14 @@ async def admin_response_to_question(message: types.Message, state: FSMContext):
 
 async def notify_admin_about_complaint(complaint, user_id, complaint_id, message: types.Message):
     admin_chat_id = await admin_id("support")
-    await message.bot.send_message(
-        chat_id=admin_chat_id,
-        text=f"Yangi shikoyat (ID: {complaint_id}):\n"
-             f"Foydalanuvchidan (ID: {user_id}):\n"
-             f"{complaint}\n\n"
-             f"Javob berish uchun yuboring: Shikoyatga javob: {complaint_id} [javob matni]"
-    )
+    for admin in admin_chat_id:
+        await message.bot.send_message(
+            chat_id=admin,
+            text=f"Yangi shikoyat (ID: {complaint_id}):\n"
+                 f"Foydalanuvchidan (ID: {user_id}):\n"
+                 f"{complaint}\n\n"
+                 f"Javob berish uchun yuboring: Shikoyatga javob: {complaint_id} [javob matni]"
+        )
 
 
 @education_router.message(UserStates.education_menu, F.text == "Kurs bo'yicha savol")
@@ -172,10 +213,11 @@ async def admin_response_to_question(message: types.Message):
 
 async def notify_admin_about_question(question_id, user_id, question_text, message: types.Message):
     admin_chat_id = await admin_id("curator")
-    await message.bot.send_message(
-        chat_id=admin_chat_id,
-        text=f"Yangi savol (ID: {question_id}):\n"
-             f"Foydalanuvchidan (ID: {user_id}):\n"
-             f"{question_text}\n\n"
-             f"Javob berish uchun yuboring: Javob: {question_id} [javob matni]"
-    )
+    for admin in admin_chat_id:
+        await message.bot.send_message(
+            chat_id=admin,
+            text=f"Yangi savol (ID: {question_id}):\n"
+                 f"Foydalanuvchidan (ID: {user_id}):\n"
+                 f"{question_text}\n\n"
+                 f"Javob berish uchun yuboring: Javob: {question_id} [javob matni]"
+        )
