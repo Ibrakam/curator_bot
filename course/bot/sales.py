@@ -34,17 +34,19 @@ async def call_me_request(message: types.Message):
 
     admin_message = (f"Yangi so‘rov №{request_id}\n"
                      f"Foydalanuvchi: {message.from_user.full_name}\n"
-                     f"Foydalanuvchi ID: {message.from_user.phone}\n"
+                     f"Foydalanuvchi ID: {message.from_user.id}\n"
                      f"So‘rov turi: Qayta qo‘ng‘iroq")
 
     try:
         admin_ids = await admin_id("sales_department")
-        for admin in admin_ids:
-            sent_msg = await message.bot.send_message(
-                chat_id=admin_id,
-                text=admin_message,
-                reply_markup=keyboard
-            )
+        logging.info(admin_ids)
+        for admin in admin_ids:  # admin_id теперь гарантированно int
+            if isinstance(admin, (int, str)):  # Проверяем тип данных
+                sent_msg = await message.bot.send_message(
+                    chat_id=int(admin),  # Преобразуем в int (если строка)
+                    text=admin_message,
+                    reply_markup=keyboard
+                )
             # Запоминаем, какому админу (admin_id) какое сообщение (message_id) отправили
             REQUEST_MESSAGES[request_id][admin_id] = sent_msg.message_id
 

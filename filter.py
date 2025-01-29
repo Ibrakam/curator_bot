@@ -3,14 +3,9 @@ from course.models import User
 from asgiref.sync import sync_to_async
 
 
-@sync_to_async
+@sync_to_async(thread_sensitive=True)
 def admin_id(role):
-    user = User.objects.filter(role=role).all()
-    print(user.role)
-    if user.role == role:
-        print(user.id)
-        return [i.user_id for i in user]
-
+    return list(User.objects.filter(role=role).values_list("user_id", flat=True))
 
 class IsCurator(Filter):
     async def __call__(self, message):
