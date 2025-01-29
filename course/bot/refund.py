@@ -134,17 +134,19 @@ async def save_refund_request(message: types.Message, state: FSMContext):
         ])
         user = await get_user_by_id(message.from_user.id)
         admin_chat_id = await admin_id("refund")
-        for admin in admin_chat_id:
-            sent_msg = await message.bot.send_message(
-                chat_id=admin_id,
-                text=f"Yangi qaytarish so‘rovi!\n"
-                     f"Ismi: {data['name']} {data['surname']}\n"
-                     f"Telefon: {user.phone}\n"
-                     f"Kurs: {data['course']}\n"
-                     f"Oqim: {data['stream']}\n"
-                     f"Sabab: {message.text}",
-                reply_markup=inline_keyboard
-            )
+        admin_message = (f"Yangi qaytarish so‘rovi!\n"
+                         f"Ismi: {data['name']} {data['surname']}\n"
+                         f"Telefon: {user.phone}\n"
+                         f"Kurs: {data['course']}\n"
+                         f"Oqim: {data['stream']}\n"
+                         f"Sabab: {message.text}")
+        for admin in admin_chat_id:  # admin_id теперь гарантированно int
+            if isinstance(admin, (int, str)):  # Проверяем тип данных
+                sent_msg = await message.bot.send_message(
+                    chat_id=int(admin),  # Преобразуем в int (если строка)
+                    text=admin_message,
+                    reply_markup=inline_keyboard
+                )
             # Запоминаем, какому админу (admin_id) какое сообщение (message_id) отправили
             REQUEST_MESSAGES[new_refund][admin_id] = sent_msg.message_id
         # Yangi qaytarish haqida administratorni xabardor qilish

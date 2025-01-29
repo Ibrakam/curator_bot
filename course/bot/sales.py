@@ -183,7 +183,12 @@ async def process_complaint(message: types.Message, state: FSMContext):
     user = await get_user_by_id(message.from_user.id)
     await add_complaint(user.user_id, message.text)
     admin_chat_id = await admin_id("sales_department")
-    print(user.full_name, user.username)
-    await message.bot.send_message(int(admin_chat_id),
-                                   f"Shikoyat {user.full_name}, @{user.username} dan:\n{message.text}")
+    admin_message = f"Shikoyat {user.full_name}, @{user.username} dan:\n{message.text}"
+    for admin in admin_chat_id:  # admin_id теперь гарантированно int
+        if isinstance(admin, (int, str)):  # Проверяем тип данных
+            sent_msg = await message.bot.send_message(
+                chat_id=int(admin),  # Преобразуем в int (если строка)
+                text=admin_message,
+            )
+
     await state.set_state(UserStates.sales_menu)

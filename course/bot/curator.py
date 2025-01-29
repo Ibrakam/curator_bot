@@ -6,14 +6,14 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from course.bot.states import UserStates
-from db.service import add_request, get_user_by_id, download_media, update_request_status, close_request_in_database, get_contacts, \
+from db.service import add_request, get_user_by_id, download_media, update_request_status, close_request_in_database, \
+    get_contacts, \
     get_question, delete_question, save_question, save_complaint, get_answer, delete_answer
 from filter import admin_id
 
 education_router = Router()
 
 REQUEST_MESSAGES = defaultdict(dict)
-
 
 REQUEST_STATUSES = {}
 
@@ -39,12 +39,13 @@ async def call_me_request(message: types.Message):
 
     try:
         admin_chat_id = await admin_id("support")
-        for admin in admin_chat_id:
-            sent_msg = await message.bot.send_message(
-                chat_id=admin_id,
-                text=admin_message,
-                reply_markup=keyboard
-            )
+        for admin in admin_chat_id:  # admin_id теперь гарантированно int
+            if isinstance(admin, (int, str)):  # Проверяем тип данных
+                sent_msg = await message.bot.send_message(
+                    chat_id=int(admin),  # Преобразуем в int (если строка)
+                    text=admin_message,
+                    reply_markup=keyboard
+                )
             # Запоминаем, какому админу (admin_id) какое сообщение (message_id) отправили
             REQUEST_MESSAGES[request_id][admin_id] = sent_msg.message_id
     except Exception as e:
@@ -167,14 +168,17 @@ async def admin_response_to_question(message: types.Message, state: FSMContext):
 
 async def notify_admin_about_complaint(complaint, user_id, complaint_id, message: types.Message):
     admin_chat_id = await admin_id("support")
-    for admin in admin_chat_id:
-        await message.bot.send_message(
-            chat_id=admin,
-            text=f"Yangi shikoyat (ID: {complaint_id}):\n"
-                 f"Foydalanuvchidan (ID: {user_id}):\n"
-                 f"{complaint}\n\n"
-                 f"Javob berish uchun yuboring: Shikoyatga javob: {complaint_id} [javob matni]"
-        )
+    admin_message = (f"Yangi shikoyat (ID: {complaint_id}):\n"
+                     f"Foydalanuvchidan (ID: {user_id}):\n"
+                     f"{complaint}\n\n"
+                     f"Javob berish uchun yuboring: Shikoyatga javob: {complaint_id} [javob matni]")
+    for admin in admin_chat_id:  # admin_id теперь гарантированно int
+        if isinstance(admin, (int, str)):  # Проверяем тип данных
+            sent_msg = await message.bot.send_message(
+                chat_id=int(admin),  # Преобразуем в int (если строка)
+                text=admin_message,
+
+            )
 
 
 @education_router.message(UserStates.education_menu, F.text == "Kurs bo'yicha savol")
@@ -213,11 +217,13 @@ async def admin_response_to_question(message: types.Message):
 
 async def notify_admin_about_question(question_id, user_id, question_text, message: types.Message):
     admin_chat_id = await admin_id("curator")
-    for admin in admin_chat_id:
-        await message.bot.send_message(
-            chat_id=admin,
-            text=f"Yangi savol (ID: {question_id}):\n"
-                 f"Foydalanuvchidan (ID: {user_id}):\n"
-                 f"{question_text}\n\n"
-                 f"Javob berish uchun yuboring: Javob: {question_id} [javob matni]"
-        )
+    admin_message = (f"Yangi savol (ID: {question_id}):\n"
+                     f"Foydalanuvchidan (ID: {user_id}):\n"
+                     f"{question_text}\n\n"
+                     f"Javob berish uchun yuboring: Javob: {question_id} [javob matni]")
+    for admin in admin_chat_id:  # admin_id теперь гарантированно int
+        if isinstance(admin, (int, str)):  # Проверяем тип данных
+            sent_msg = await message.bot.send_message(
+                chat_id=int(admin),  # Преобразуем в int (если строка)
+                text=admin_message,
+            )
